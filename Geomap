@@ -1,0 +1,294 @@
+pip install imageio
+
+import geoplot as gplt
+import geopandas as gpd
+import geoplot.crs as gcrs
+import imageio
+import pandas as pd
+import pathlib
+import matplotlib.pyplot as plt
+import mapclassify as mc
+import numpy as np
+
+usa = gpd.read_file("maps/cb_2018_us_state_20m.shp")
+usa.head()
+
+state_pop = pd.read_csv("data/nst-est2018-alldata.csv")
+state_pop.head()
+
+pop_states = usa.merge(state_pop, left_on="NAME", right_on="NAME")
+pop_states.head()
+
+pop_states[pop_states.NAME=="California"].plot()
+
+path = gplt.datasets.get_path("contiguous_usa")
+contiguous_usa = gpd.read_file(path)
+
+gplt.polyplot(contiguous_usa)
+
+path = gplt.datasets.get_path("usa_cities")
+usa_cities = gpd.read_file(path)
+
+continental_usa_cities = usa_cities.query('STATE not in ["HI", "AK", "PR"]')
+gplt.pointplot(continental_usa_cities)
+
+ax = gplt.polyplot(contiguous_usa)
+gplt.pointplot(continental_usa_cities, ax=ax)
+
+ax = gplt.polyplot(contiguous_usa, projection=gcrs.AlbersEqualArea())
+gplt.pointplot(continental_usa_cities, ax=ax)
+
+ax = gplt.polyplot(contiguous_usa, projection=gcrs.AlbersEqualArea())
+gplt.pointplot(
+  continental_usa_cities,
+  ax=ax,
+  hue="ELEV_IN_FT",
+  legend=True
+)
+
+ax = gplt.polyplot(
+  contiguous_usa,
+  edgecolor="white",
+  facecolor="lightgray",
+  figsize=(12, 8),
+  projection=gcrs.AlbersEqualArea()
+)
+
+gplt.pointplot(
+  continental_usa_cities,
+  ax=ax,
+  hue="ELEV_IN_FT",
+  cmap="Blues",
+  scheme="quantiles",
+  scale="ELEV_IN_FT",
+  limits=(1, 10),
+  legend=True,
+  legend_var="scale",
+  legend_kwargs={"frameon": False},
+  legend_values=[-110, 1750, 3600, 5500, 7400],
+  legend_labels=["-110 feet", "1750 feet", "3600 feet", "5500 feet", "7400 feet"]
+)
+
+ax.set_title("Cities in the continental US, by elevation", fontsize=16)
+
+ax = gplt.polyplot(contiguous_usa, projection=gcrs.AlbersEqualArea())
+gplt.choropleth(
+  contiguous_usa,
+  hue="population",
+  edgecolor="white",
+  linewidth=1,
+  cmap="Greens",
+  legend=True,
+  scheme="FisherJenks",
+  legend_labels=[
+    "<3 million", "3-6.7 million", "6.7-12.8 million",
+    "12.8-25 million", "25-37 million"
+  ],
+  projection=gcrs.AlbersEqualArea(),
+  ax=ax
+)
+
+boroughs = gpd.read_file(gplt.datasets.get_path("nyc_boroughs"))
+collisions = gpd.read_file(gplt.datasets.get_path("nyc_collision_factors"))
+ax = gplt.polyplot(boroughs, projection=gcrs.AlbersEqualArea())
+gplt.kdeplot(collisions, cmap="Reds", shade=True, clip=boroughs, ax=ax)
+
+ax = gplt.polyplot(contiguous_usa, projection=gcrs.AlbersEqualArea())
+
+gplt.kdeplot(
+  continental_usa_cities, 
+  cmap="Reds", 
+  shade=True, 
+  clip=contiguous_usa, 
+  ax=ax
+)
+
+obesity = pd.read_csv(gplt.datasets.get_path("obesity_by_state"), sep="\t")
+obesity.head()
+
+geo_obesity = contiguous_usa.set_index("state").join(obesity.set_index("State"))
+geo_obesity.head()
+
+gplt.cartogram(
+  geo_obesity,
+  scale="Percent",
+  projection=gcrs.AlbersEqualArea()
+)
+
+scheme = mc.Quantiles(continental_usa_cities["ELEV_IN_FT"], k=10)
+
+gplt.pointplot(
+  continental_usa_cities,
+  projection=gcrs.AlbersEqualArea(),
+  hue="ELEV_IN_FT",
+  scheme=scheme,
+  cmap="inferno_r",
+  legend=True
+)
+
+import warnings
+warnings.filterwarnings("ignore", "GeoSeries.isna", UserWarning)
+
+melbourne = gpd.read_file(gplt.datasets.get_path("melbourne"))
+df = gpd.read_file(gplt.datasets.get_path("melbourne_schools"))
+melbourne_primary_schools = df.query('School_Type == "Primary"')
+
+ax = gplt.voronoi(
+  melbourne_primary_schools,
+  clip=melbourne,
+  linewidth=0.5,
+  edgecolor="white",
+  projection=gcrs.Mercator()
+)
+
+gplt.polyplot(
+  melbourne,
+  edgecolor="None",
+  facecolor="lightgray",
+  ax=ax
+)
+
+gplt.pointplot(
+  melbourne_primary_schools,
+  color="black",
+  ax=ax,
+  s=1,
+  extent=melbourne.total_bounds
+)
+
+plt.title("Primary Schools in Greater Melbourne, 2018")
+
+proj = gplt.crs.AlbersEqualArea(
+    central_longitude=-98,
+    central_latitude=39.5
+)
+
+ax = gplt.voronoi(
+    continental_usa_cities,
+    hue="ELEV_IN_FT",
+    clip=contiguous_usa,
+    projection=proj,
+    cmap="Reds",
+    legend=True,
+    edgecolor="white",
+    linewidth=0.01
+)
+
+gplt.polyplot(
+    contiguous_usa,
+    ax=ax,
+    extent=contiguous_usa.total_bounds,
+    edgecolor="black",
+    linewidth=1,
+    zorder=1
+)
+
+ihme = pd.read_csv("data/Hospitalization_all_locs.csv")
+ihme.head()
+
+is_earthday = ihme["date"]=="2020-04-22"
+is_earthday.head()
+
+cv19 = contiguous_usa.merge(ihme[is_earthday], left_on="state", right_on="location_name")
+cv19.head()
+
+deaths_per_mil = cv19["deaths_mean"] / cv19["population"] * 1000000.0
+cv19["deaths_per_mil"] = deaths_per_mil
+
+ax = gplt.choropleth(
+    cv19,
+    hue="deaths_per_mil",
+    edgecolor="white",
+    linewidth=5,
+    cmap="Reds",
+    alpha = 0.8,
+    projection=gcrs.AlbersEqualArea(),
+    figsize=(30, 30)
+)
+
+ax = gplt.pointplot(
+    continental_usa_cities,
+    hue="POP_2010",
+    cmap="Greens",
+    scheme="quantiles",
+    scale="POP_2010",
+    limits=(3, 50),
+    zorder=2, 
+    alpha = 0.4,
+    ax=ax
+)
+
+ax.set_title(
+    "COVID-19 deaths/million vs. population, on Earth Day 2020",
+    fontsize=36
+)
+
+def plot_choropleth (anim_path, date, cv19, cities):
+    ax = gplt.choropleth(
+        cv19,
+        hue="deaths_per_mil",
+        edgecolor="white",
+        linewidth=5,
+        cmap="Reds",
+        alpha = 0.8,
+        projection=gcrs.AlbersEqualArea(),
+        figsize=(30, 30)
+    )
+    
+    ax = gplt.pointplot(
+        cities,
+        hue="POP_2010",
+        cmap="Greens",
+        scheme="quantiles",
+        scale="POP_2010",
+        limits=(3, 50),
+        zorder=2, 
+        alpha = 0.4,
+        ax=ax
+    )
+
+    ax.set_title(
+        f"COVID-19 deaths/million vs. population on {date}",
+        fontsize=36
+    )
+
+    file_name = str(anim_path / "{}.png".format(date.replace("-", "")))
+    plt.savefig(file_name, bbox_inches="tight", pad_inches=0.1)
+
+    return file_name
+    
+    date_set = set([])
+
+for d in ihme["date"].tolist():
+    if d >= "2020-03-23" and d <= "2020-04-01":
+        date_set.add(d)
+
+dates = sorted(list(date_set))
+
+anim_path = pathlib.Path("anim/")
+anim_path.mkdir(parents=True, exist_ok=True)
+
+fig = plt.figure()
+image_files = []
+
+for date in dates:
+    is_earthday = ihme["date"]==date
+    cv19 = contiguous_usa.merge(ihme[is_earthday], left_on="state", right_on="location_name")
+    
+    deaths_per_mil = cv19["deaths_mean"] / cv19["population"] * 1000000.0
+    cv19["deaths_per_mil"] = deaths_per_mil
+
+    file_name = plot_choropleth(anim_path, date, cv19, continental_usa_cities)
+    image_files.append(file_name)
+    
+    images = []
+
+for file_name in image_files:
+    images.append(imageio.v2.imread(file_name))
+
+gif_path = "movie.gif"
+imageio.mimsave(gif_path, images, fps=2)
+
+from IPython.display import HTML
+
+HTML('<img src="movie.gif" />')
